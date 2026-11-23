@@ -1,1 +1,23 @@
-const CACHE='fuellog-v2';const ASSETS=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png','./icon-180.png'];self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)));self.skipWaiting()});self.addEventListener('activate',e=>{e.waitUntil(self.clients.claim())});self.addEventListener('fetch',e=>{if(e.request.method==='GET')e.respondWith(caches.open(CACHE).then(cache=>cache.match(e.request)).then(x=>x||fetch(e.request)))});
+const CACHE = 'fuellog-v3';
+const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-180.png'];
+
+self.addEventListener('install', event => {
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', event => {
+  event.waitUntil(self.clients.claim());
+});
+
+self.addEventListener('fetch', event => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+  if (request.mode === 'navigate') {
+    event.respondWith(fetch(request).catch(async () => {
+      const cache = await caches.open(CACHE);
+      return cache.match('./index.html');
+    }));
+    return;
+  }
+  event.respondWith(caches.open(CACHE).then(cache => cache.match(request)).then(cached => cached || fetch(request)));
+});
