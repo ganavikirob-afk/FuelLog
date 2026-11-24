@@ -11,7 +11,7 @@
   <p id="baselineError" role="alert" hidden></p>
   <button type="submit" class="primary" style="min-height:44px;margin-top:12px">Save baseline</button>
 </form><input id="importFile" type="file" accept="application/json,.json" hidden><p class="note">Records stay in this browser on your iPhone. Back up regularly: deleting Safari website data or changing devices may erase local records.</p></section><p class="footer">FuelLog · Private, offline-friendly mileage log · Version 1.0</p></main>
-<dialog id="formDialog"><form id="entryForm"><h2 id="formTitle">Add refill</h2><input type="hidden" id="entryType"><label for="date">Date</label><input type="date" id="date" required><div id="fuelField"><label for="fuel">Fuel</label><select id="fuel"><option value="cng">CNG (kg)</option><option value="petrol">Petrol (L)</option></select></div><div id="switchField" class="hidden"><label for="toFuel">Switched to</label><select id="toFuel"><option value="petrol">Petrol (CNG ran empty)</option><option value="cng">CNG</option></select></div><label for="odo">Odometer reading (km)</label><input type="number" id="odo" min="0" step="1" inputmode="numeric" required><div id="rangeField" class="hidden"><label for="odoMax">Highest possible reading (km)</label><input type="number" id="odoMax" min="0" step="1" inputmode="numeric"><p class="hint">For uncertainty, enter the lowest reading above and highest reading here (e.g. 8600 to 8660).</p></div><div id="quantityField"><label for="quantity">Quantity filled <span id="unit">(kg)</span></label><input type="number" id="quantity" min="0.001" step="0.001" inputmode="decimal"><div class="inline" id="fullField"><input type="checkbox" id="full"><label for="full">Petrol tank filled completely</label></div></div><label for="notes">Notes (optional)</label><textarea id="notes" placeholder="e.g. petrol indicator 3 bars"></textarea><div class="form-actions"><button type="button" class="secondary" id="cancel">Cancel</button><button type="submit" class="primary">Save entry</button></div></form></dialog>
+<dialog id="formDialog"><form id="entryForm"><h2 id="formTitle">Add refill</h2><input type="hidden" id="entryType"><label for="date">Date</label><input type="date" id="date" required><div id="fuelField"><label for="fuel">Fuel</label><select id="fuel"><option value="cng">CNG (kg)</option><option value="petrol">Petrol (L)</option></select></div><div id="switchField" class="hidden"><label for="toFuel">Switched to</label><select id="toFuel"><option value="petrol">Petrol (CNG ran empty)</option><option value="cng">CNG</option></select></div><label for="odo">Odometer reading (km)</label><input type="number" id="odo" min="0" step="1" inputmode="numeric" required><div id="rangeField" class="hidden"><label for="odoMax">Highest possible reading (km)</label><input type="number" id="odoMax" min="0" step="1" inputmode="numeric"><p class="hint">For uncertainty, enter the lowest reading above and highest reading here (e.g. 8600 to 8660).</p></div><div id="quantityField"><label for="quantity">Quantity filled <span id="unit">(kg)</span></label><input type="number" id="quantity" min="0.001" step="0.001" inputmode="decimal"><div class="inline" id="fullField"><input type="checkbox" id="full"><label for="full">Petrol tank filled completely</label></div></div><label for="notes">Notes (optional)</label><textarea id="notes" placeholder="e.g. petrol indicator 3 bars"></textarea><p id="entryError" role="alert" hidden></p><div class="form-actions"><button type="button" class="secondary" id="cancel">Cancel</button><button type="submit" class="primary">Save entry</button></div></form></dialog>
 <script>
 (()=>{'use strict';const KEY='fuellog-v1';let entries=load();const $=id=>document.getElementById(id);function load(){try{const saved=JSON.parse(localStorage.getItem(KEY));if(Array.isArray(saved)&&saved.length)return saved}catch(e){}return []}function save(){localStorage.setItem(KEY,JSON.stringify(entries));render()}function sorted(){return [...entries].sort((a,b)=>a.odo-b.odo||({baseline:0,switch:1,fill:2}[a.type]-{baseline:0,switch:1,fill:2}[b.type])||a.date.localeCompare(b.date))}function fmt(n,d=1){return Number(n).toLocaleString('en-IN',{maximumFractionDigits:d,minimumFractionDigits:d})}function modeFor(fuel){return fuel==='cng'?'CNG':'Petrol'}function getFillSequence(fuel){const s=sorted(),base=s.find(e=>e.type==='baseline');let arr=base?[{...base,quantity:0,full:true}]:[];for(const e of s)if(e.type==='fill'&&e.fuel===fuel&&(fuel==='cng'||e.full))arr.push(e);return arr}
 function calcFuelDistance(start,end,fuel){const events=sorted().filter(e=>e.odo>=start&&e.odo<=end&&(e.type==='switch'||e.type==='fill'&&e.fuel==='cng'));let mode='cng',posMin=start,posMax=start,lower=0,upper=0; // Starting mode determined from events at/before start.
@@ -20,7 +20,83 @@ for(const e of events){let x=Math.max(start,Math.min(end,e.odo)),y=Math.max(x,Ma
 function resultsFor(fuel){let runs=[],fills=getFillSequence(fuel);for(let i=1;i<fills.length;i++){let a=fills[i-1],b=fills[i];if(b.odo<=a.odo)continue;const quantity=fuel==='cng'?Number(b.quantity):sorted().filter(e=>e.type==='fill'&&e.fuel==='petrol'&&e.odo>a.odo&&e.odo<=b.odo).reduce((x,e)=>x+Number(e.quantity),0);if(!(quantity>0))continue;const [min,max]=calcFuelDistance(a.odo,b.odo,fuel);runs.push({from:a,to:b,min,max,quantity,lo:min/quantity,hi:max/quantity})}return runs}
 function mileageText(r,fuel){return r?Math.abs(r.hi-r.lo)<.05?fmt(r.lo,2)+' '+(fuel==='cng'?'km/kg':'km/L'):fmt(r.lo,2)+'–'+fmt(r.hi,2)+' '+(fuel==='cng'?'km/kg':'km/L'):'—'}function updateCard(fuel){const rs=resultsFor(fuel),last=rs.at(-1),node=$(fuel+'Value'),cap=$(fuel+'Caption');node.textContent=last?mileageText(last,fuel):'—';node.style.fontSize=last&&last.hi-last.lo>.05?'17px':'26px';cap.textContent=last?`${last.from.odo.toLocaleString('en-IN')} → ${last.to.odo.toLocaleString('en-IN')} km · ${fmt(last.quantity,2)} ${fuel==='cng'?'kg':'L'}`:fuel==='cng'?'Add a CNG full-tank refill':'Mark petrol full at next refill'}
 function render(){const ready=entries.some(e=>e.type==='baseline');for(const id of ['addFill','addSwitch'])$(id).disabled=!ready;$('baselineSetup').hidden=ready;updateCard('cng');updateCard('petrol');const c=resultsFor('cng'),p=resultsFor('petrol');let html='';for(const [fuel,rs] of [['cng',c],['petrol',p]]){for(const r of rs.slice(-4).reverse()){html+=`<div class="history-row"><div><strong>${fuel==='cng'?'🟢 CNG':'🟠 Petrol'}</strong><div class="small">${esc(r.from.odo)}–${esc(r.to.odo)} km · ${fmt(r.quantity,2)} ${fuel==='cng'?'kg':'L'}</div></div><strong>${mileageText(r,fuel)}</strong></div>`}}$('results').innerHTML=html||'<div class="empty">Your first valid fuel-to-fuel calculation will appear here.</div>';let uncertain=sorted().some(e=>e.type==='switch'&&e.odoMax>e.odo);$('warning').classList.toggle('hidden',!uncertain);$('warning').textContent=uncertain?'Some fuel-switch readings are approximate, so mileage is shown as a range. Accuracy also depends on logging every switch between CNG and petrol.':' ';const s=sorted().reverse();$('count').textContent=s.length+' entries';$('timeline').innerHTML=s.map(e=>{const title=e.type==='baseline'?'Starting baseline · Both tanks full':e.type==='switch'?'Switched to '+modeFor(e.toFuel):modeFor(e.fuel)+' refill · '+fmt(e.quantity,2)+(e.fuel==='cng'?' kg':' L')+(e.full?' · Full':'');const reading=e.odoMax&&e.odoMax>e.odo?`${e.odo.toLocaleString('en-IN')}–${e.odoMax.toLocaleString('en-IN')}`:e.odo.toLocaleString('en-IN');return `<div class="entry"><div class="dot ${e.type==='switch'?'switch':e.fuel==='petrol'?'petrol':''}">${e.type==='switch'?'⇄':e.type==='baseline'?'◎':'⛽'}</div><div class="entry-body"><div class="entry-title">${esc(title)}</div><div class="entry-meta">${esc(e.date)} · ${reading} km${e.notes?' · '+esc(e.notes):''}</div></div>${e.type==='baseline'?'':`<button class="delete" aria-label="Delete entry" data-delete="${esc(e.id)}">×</button>`}</div>`}).join('');document.querySelectorAll('[data-delete]').forEach(el=>el.onclick=()=>{if(confirm('Delete this entry?')){entries=entries.filter(e=>e.id!==el.dataset.delete);save()}})}function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function updateForm(){const isSwitch=$('entryType').value==='switch',fuel=$('fuel').value;$('fuelField').classList.toggle('hidden',isSwitch);$('switchField').classList.toggle('hidden',!isSwitch);$('rangeField').classList.toggle('hidden',!isSwitch);$('quantityField').classList.toggle('hidden',isSwitch);$('quantity').required=!isSwitch;$('unit').textContent=fuel==='cng'?'(kg)':'(L)';$('fullField').classList.toggle('hidden',fuel==='cng');$('full').checked=fuel==='cng'?true:$('full').checked}function openForm(type){$('entryForm').reset();$('entryType').value=type;$('date').value=new Date().toLocaleDateString('en-CA');$('formTitle').textContent=type==='switch'?'Record fuel switch':'Add fuel refill';$('odo').value=sorted().at(-1)?.odo||'';$('full').checked=false;updateForm();$('formDialog').showModal()}$('addFill').onclick=()=>openForm('fill');$('addSwitch').onclick=()=>openForm('switch');$('fuel').onchange=updateForm;$('cancel').onclick=()=>$('formDialog').close();$('entryForm').onsubmit=e=>{e.preventDefault();const type=$('entryType').value,odo=Number($('odo').value),max=$('odoMax').value?Number($('odoMax').value):odo,quantity=Number($('quantity').value);const baseline=entries.find(entry=>entry.type==='baseline');if(!baseline||!Number.isFinite(odo)||odo<baseline.odo)return alert('Reading must be at least the starting odometer reading.');if(type==='switch'&&max<odo)return alert('Highest possible reading must be at least the lowest reading.');if(type==='fill'&&(!Number.isFinite(quantity)||quantity<=0))return alert('Enter a valid fuel quantity.');const record={id:'e'+Date.now()+Math.random().toString(36).slice(2,8),type,date:$('date').value,odo,notes:$('notes').value.trim()};if(type==='fill')Object.assign(record,{fuel:$('fuel').value,quantity,full:$('fuel').value==='cng'||$('full').checked});else Object.assign(record,{toFuel:$('toFuel').value,odoMax:max});entries.push(record);save();$('formDialog').close()};function download(name,blob){let a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}$('exportJson').onclick=()=>download('fuellog-backup.json',new Blob([JSON.stringify({version:1,entries},null,2)],{type:'application/json'}));$('exportCsv').onclick=()=>{let keys=['date','type','fuel','toFuel','odo','odoMax','quantity','full','notes'],csv=[keys.join(','),...sorted().map(e=>keys.map(k=>'"'+String(e[k]??'').replace(/"/g,'""')+'"').join(','))].join('\r\n');download('fuellog.csv',new Blob([csv],{type:'text/csv;charset=utf-8'}))};$('importJson').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{try{const data=JSON.parse(await e.target.files[0].text());if(!Array.isArray(data.entries)||!data.entries.some(x=>x.type==='baseline'))throw Error('Invalid FuelLog backup');if(confirm('Replace current records with this backup?')){entries=data.entries;save()}}catch(err){alert('Could not import: '+err.message)}e.target.value=''};
+function updateForm() {
+  const isSwitch = $('entryType').value === 'switch';
+  const fuel = $('fuel').value;
+  $('fuelField').classList.toggle('hidden', isSwitch);
+  $('switchField').classList.toggle('hidden', !isSwitch);
+  $('rangeField').classList.toggle('hidden', !isSwitch);
+  $('quantityField').classList.toggle('hidden', isSwitch);
+  $('quantity').required = !isSwitch;
+  $('unit').textContent = fuel === 'cng' ? '(kg)' : '(L)';
+  $('fullField').classList.toggle('hidden', fuel === 'cng');
+}
+
+function openForm(type) {
+  $('entryForm').reset();
+  $('entryError').hidden = true;
+  $('entryType').value = type;
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  $('date').value = now.getFullYear() + '-' + month + '-' + day;
+  $('formTitle').textContent = type === 'switch' ? 'Record fuel switch' : 'Add fuel refill';
+  $('odo').value = sorted().at(-1)?.odo ?? '';
+  updateForm();
+  $('formDialog').showModal();
+}
+
+$('addFill').onclick = () => openForm('fill');
+$('addSwitch').onclick = () => openForm('switch');
+$('fuel').onchange = updateForm;
+$('cancel').onclick = () => $('formDialog').close();
+$('entryForm').onsubmit = event => {
+  event.preventDefault();
+  const error = $('entryError');
+  function showError(message) {
+    error.textContent = message;
+    error.hidden = false;
+  }
+
+  const type = $('entryType').value;
+  const date = $('date').value;
+  const odo = Number($('odo').value);
+  const max = $('odoMax').value ? Number($('odoMax').value) : odo;
+  const quantity = Number($('quantity').value);
+  const baseline = entries.find(entry => entry.type === 'baseline');
+  if (!date) return showError('Choose an entry date.');
+  if (!baseline || !Number.isSafeInteger(odo) || odo < baseline.odo) {
+    return showError('Enter an odometer reading at or above the starting baseline.');
+  }
+  if (type === 'switch' && (!Number.isSafeInteger(max) || max < odo)) {
+    return showError('Enter a highest reading at or above the lowest reading.');
+  }
+  if (type === 'fill' && (!Number.isFinite(quantity) || quantity <= 0)) {
+    return showError('Enter a fuel quantity greater than zero.');
+  }
+  const record = {
+    id: 'e' + Date.now() + Math.random().toString(36).slice(2, 8),
+    type, date, odo, notes: $('notes').value.trim()
+  };
+  if (type === 'fill') {
+    const fuel = $('fuel').value;
+    Object.assign(record, {fuel, quantity, full: fuel === 'cng' || $('full').checked});
+  } else {
+    Object.assign(record, {toFuel: $('toFuel').value, odoMax: max});
+  }
+
+  const updated = [...entries, record];
+  try {
+    localStorage.setItem(KEY, JSON.stringify(updated));
+  } catch {
+    return showError('FuelLog could not save the entry on this device. Your previous entries are still in the log.');
+  }
+  entries = updated;
+  render();
+  $('formDialog').close();
+};
+
+function download(name,blob){let a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}$('exportJson').onclick=()=>download('fuellog-backup.json',new Blob([JSON.stringify({version:1,entries},null,2)],{type:'application/json'}));$('exportCsv').onclick=()=>{let keys=['date','type','fuel','toFuel','odo','odoMax','quantity','full','notes'],csv=[keys.join(','),...sorted().map(e=>keys.map(k=>'"'+String(e[k]??'').replace(/"/g,'""')+'"').join(','))].join('\r\n');download('fuellog.csv',new Blob([csv],{type:'text/csv;charset=utf-8'}))};$('importJson').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{try{const data=JSON.parse(await e.target.files[0].text());if(!Array.isArray(data.entries)||!data.entries.some(x=>x.type==='baseline'))throw Error('Invalid FuelLog backup');if(confirm('Replace current records with this backup?')){entries=data.entries;save()}}catch(err){alert('Could not import: '+err.message)}e.target.value=''};
 
 function setBaseline(date, reading) {
   if (entries.length > 0 || load().length > 0) return false;
